@@ -30,15 +30,10 @@ finish(){
     [ "$SSL" == false ] && appurl="http://$FQDN"
 
     # Step 1: Create the database
-    mysql -uroot -e "CREATE DATABASE IF NOT EXISTS $DBNAME;"
-
-    # Step 2: Create the user
-    mysql -uroot -e "CREATE USER IF NOT EXISTS '$DBUSER'@'%' IDENTIFIED BY '$DBPASSWORD';"
-
-    # Step 3: Grant all privileges on the database to the user
-    mysql -uroot -e "GRANT ALL PRIVILEGES ON $DBNAME.* TO '$DBUSER'@'%';"
-
-    # Step 4: Flush privileges to ensure all changes are applied immediately
+    mysql -uroot -e "CREATE DATABASE $DBNAME DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+    mysql -uroot -e "GRANT ALL ON $DBNAME.* TO '$DBNAME'@'localhost' IDENTIFIED BY '$DBPASSWORD';"
+    mysql -uroot -e "CREATE USER $DBUSER@'%' IDENTIFIED BY '$DBPASSWORD';"
+    mysql -uroot -e "GRANT ALL PRIVILEGES ON *.* TO $DBUSER@'%' with grant option;"
     mysql -uroot -e "FLUSH PRIVILEGES;"
 
     php artisan p:environment:setup --author="$EMAIL" --url="$appurl" --timezone="CET" --telemetry=false --cache="redis" --session="redis" --queue="redis" --redis-host="localhost" --redis-pass="null" --redis-port="6379" --settings-ui=true
