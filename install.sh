@@ -3,47 +3,49 @@
 
 ########################################################################
 #                                                                      #
-#            Pterodactyl Installer, Updater, Remover and More          #
-#            Copyright 2022, Malthe K, <me@malthe.cc>                  # 
-# https://github.com/guldkage/Pterodactyl-Installer/blob/main/LICENSE  #
+#                      Pterodactyl Auto-Installer                      #
+#            Copyright 2024, Malthe K, LeKyuFr                         # 
+# https://github.com/LeKyuFr/Wan-Host-autoinstall-pterodactyl/LICENSE  #
 #                                                                      #
 #  This script is not associated with the official Pterodactyl Panel.  #
-#  You may not remove this line                                        #
+#  You may not remove this line :)                                     #
 #                                                                      #
 ########################################################################
 
 dist="$(. /etc/os-release && echo "$ID")"
 version="$(. /etc/os-release && echo "$VERSION_ID")"
 
-### This script is meant to be used: ###
-### ./install.sh <FQDN/URL to panel> <SSL true or false> <email> <username> <firstname> <lastname> <password> <wings true or false> <dbhost> <dbport> <dbuser> <dbpassword> <dbname> ###
-
 finish(){
     clear
     echo ""
     echo "[!] Panel installed."
     echo ""
+    echo "Admin user created with the following credentials:"
+    echo "Username: admin"
+    echo "Password: admin"
+    echo "First Name: admin"
+    echo "Last Name: admin"
+    echo "Email: $EMAIL"
+    echo "FQDN: $FQDN"
 }
 
-    panel_conf(){
-    [ "$SSL" == true ] && appurl="https://$FQDN"
-    [ "$SSL" == false ] && appurl="http://$FQDN"
-
-    # Step 1: Create the database
-    mysql -uroot -e "CREATE DATABASE $DBNAME DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-    mysql -uroot -e "GRANT ALL ON $DBNAME.* TO '$DBNAME'@'localhost' IDENTIFIED BY '$DBPASSWORD';"
-    mysql -uroot -e "CREATE USER $DBUSER@'%' IDENTIFIED BY '$DBPASSWORD';"
-    mysql -uroot -e "GRANT ALL PRIVILEGES ON *.* TO $DBUSER@'%' with grant option;"
-    mysql -uroot -e "FLUSH PRIVILEGES;"
-
-    php artisan p:environment:setup --author="$EMAIL" --url="$appurl" --timezone="CET" --telemetry=false --cache="redis" --session="redis" --queue="redis" --redis-host="localhost" --redis-pass="null" --redis-port="6379" --settings-ui=true
-    php artisan p:environment:database --host="$DBHOST" --port="$DBPORT" --database="$DBNAME" --username="$DBUSER" --password="$DBPASSWORD"
+panel_conf(){
+    [ "$SSL" == "true" ] && appurl="https://$FQDN" || appurl="http://$FQDN"
+    DBPASSWORD=$(LC_ALL=C </dev/urandom tr -dc '[:alnum:]' | fold -w 16 | head -n 1)
+    mariadb -u root -e "CREATE USER 'pterodactyl'@'127.0.0.1' IDENTIFIED BY '$DBPASSWORD';" 
+    mariadb -u root -e "CREATE DATABASE panel;" 
+    mariadb -u root -e "GRANT ALL PRIVILEGES ON panel.* TO 'pterodactyl'@'127.0.0.1' WITH GRANT OPTION;" 
+    mariadb -u root -e "FLUSH PRIVILEGES;"
     
+    php artisan p:environment:setup --author="$EMAIL" --url="$appurl" --timezone="CET" --telemetry=false --cache="redis" --session="redis" --queue="redis" --redis-host="localhost" --redis-pass="null" --redis-port="6379" --settings-ui=true
+    php artisan p:environment:database --host="127.0.0.1" --port="3306" --database="panel" --username="pterodactyl" --password="$DBPASSWORD"
     php artisan migrate --seed --force
-    php artisan p:user:make --email="$EMAIL" --username="$USERNAME" --name-first="$FIRSTNAME" --name-last="$LASTNAME" --password="$PASSWORD" --admin=1
+    php artisan p:user:make --email="$EMAIL" --username="admin" --name-first="admin" --name-last="admin" --password="admin" --admin=1
+    
     chown -R www-data:www-data /var/www/pterodactyl/*
     curl -o /etc/systemd/system/pteroq.service https://raw.githubusercontent.com/guldkage/Pterodactyl-Installer/main/configs/pteroq.service
     (crontab -l ; echo "* * * * * php /var/www/pterodactyl/artisan schedule:run >> /dev/null 2>&1")| crontab -
+   
     sudo systemctl enable --now redis-server
     sudo systemctl enable --now pteroq.service
     
@@ -55,7 +57,6 @@ finish(){
         curl -L -o /usr/local/bin/wings "https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_$([[ "$(uname -m)" == "x86_64" ]] && echo "amd64" || echo "arm64")"
         curl -o /etc/systemd/system/wings.service https://raw.githubusercontent.com/guldkage/Pterodactyl-Installer/main/configs/wings.service
         chmod u+x /usr/local/bin/wings
-    fi
     
     if  [ "$SSL" == "true" ]; then
         rm -rf /etc/nginx/sites-enabled/default
@@ -126,46 +127,34 @@ panel_install(){
     panel_conf
 }
 
-#! /bin/sh -
+FQDN="$1"
+SSL="$2"
+EMAIL="$3"
+USERNAME="admin"
+FIRSTNAME="admin"
+LASTNAME="admin"
+PASSWORD="admin"
+WINGS="$4"
 
-FQDN=`echo $1`
-SSL=`echo $2`
-EMAIL=`echo $3`
-USERNAME=`echo $4`
-FIRSTNAME=`echo $5`
-LASTNAME=`echo $6`
-PASSWORD=`echo $7`
-WINGS=`echo $8`
-DBHOST=`echo $9`
-DBPORT=`echo ${10}`
-DBUSER=`echo ${11}`
-DBPASSWORD=`echo ${12}`
-DBNAME=`echo ${13}`
-
-if [ -z "$FQDN" ] || [ -z "$SSL" ] || [ -z "$EMAIL" ] || [ -z "$USERNAME" ] || [ -z "$FIRSTNAME" ] || [ -z "$LASTNAME" ] || [ -z "$PASSWORD" ] || [ -z "$WINGS" ] || [ -z "$DBHOST" ] || [ -z "$DBPORT" ] || [ -z "$DBUSER" ] || [ -z "$DBPASSWORD" ] || [ -z "$DBNAME" ]; then
+if [ -z "$FQDN" ] || [ -z "$SSL" ] || [ -z "$EMAIL" ]; then
     echo "Error! The usage of this script is incorrect."
     exit 1
 fi
 
 echo "Checking your OS.."
-if { [ "$dist" = "ubuntu" ] && [ "$version" = "20.04" ]; } || { [ "$dist" = "debian" ] && [ "$version" = "11" ] || [ "$version" = "12" ]; }; then
+if [ "$dist" == "ubuntu" ] && [ "$version" == "20.04" ] || [ "$dist" == "debian" ] && [ "$version" == "11" ] || [ "$dist" == "debian" ] && [ "$version" == "12" ]; then
     echo "Welcome to Autoinstall of Pterodactyl Panel"
     echo "Quick summary before the install begins:"
     echo ""
     echo "FQDN (URL): $FQDN"
     echo "SSL: $SSL"
     echo "Preselected webserver: NGINX"
-    echo "Email $EMAIL"
-    echo "Username $USERNAME"
-    echo "First name $FIRSTNAME"
-    echo "Last name $LASTNAME"
+    echo "Email: $EMAIL"
+    echo "Default Admin User Credentials:"
+    echo "Username: $USERNAME"
     echo "Password: $PASSWORD"
-    echo "Wings install: $WINGS"
-    echo "Database Host: $DBHOST"
-    echo "Database Port: $DBPORT"
-    echo "Database User: $DBUSER"
-    echo "Database Password: $DBPASSWORD"
-    echo "Database Name: $DBNAME"
+    echo "First Name: $FIRSTNAME"
+    echo "Last Name: $LASTNAME"
     echo ""
     echo "Starting automatic installation in 5 seconds"
     sleep 5s
