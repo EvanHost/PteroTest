@@ -30,16 +30,16 @@ finish(){
     [ "$SSL" == false ] && appurl="http://$FQDN"
 
     # Step 1: Create the database
-    mariadb -h "$DBHOST" -P "$DBPORT" -u root -p"$ROOTDBPASSWORD" -e "CREATE DATABASE IF NOT EXISTS $DBNAME;"
+    mysql -uroot -e "CREATE DATABASE IF NOT EXISTS $DBNAME;"
 
     # Step 2: Create the user
-    mariadb -h "$DBHOST" -P "$DBPORT" -u root -p"$ROOTDBPASSWORD" -e "CREATE USER IF NOT EXISTS '$DBUSER'@'%' IDENTIFIED BY '$DBPASSWORD';"
+    mysql -uroot -e "CREATE USER IF NOT EXISTS '$DBUSER'@'%' IDENTIFIED BY '$DBPASSWORD';"
 
     # Step 3: Grant all privileges on the database to the user
-    mariadb -h "$DBHOST" -P "$DBPORT" -u root -p"$ROOTDBPASSWORD" -e "GRANT ALL PRIVILEGES ON $DBNAME.* TO '$DBUSER'@'%';"
+    mysql -uroot -e "GRANT ALL PRIVILEGES ON $DBNAME.* TO '$DBUSER'@'%';"
 
     # Step 4: Flush privileges to ensure all changes are applied immediately
-    mariadb -h "$DBHOST" -P "$DBPORT" -u root -p"$ROOTDBPASSWORD" -e "FLUSH PRIVILEGES;"
+    mysql -uroot -e "FLUSH PRIVILEGES;"
 
     php artisan p:environment:setup --author="$EMAIL" --url="$appurl" --timezone="CET" --telemetry=false --cache="redis" --session="redis" --queue="redis" --redis-host="localhost" --redis-pass="null" --redis-port="6379" --settings-ui=true
     php artisan p:environment:database --host="$DBHOST" --port="$DBPORT" --database="$DBNAME" --username="$DBUSER" --password="$DBPASSWORD"
