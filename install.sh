@@ -25,13 +25,25 @@ finish(){
     echo ""
 }
 
-panel_conf(){
+    panel_conf(){
     [ "$SSL" == true ] && appurl="https://$FQDN"
     [ "$SSL" == false ] && appurl="http://$FQDN"
-    mariadb -h "$DBHOST" -P "$DBPORT" -u "$DBUSER" -p"$DBPASSWORD" -e "CREATE DATABASE IF NOT EXISTS $DBNAME;"
-    mariadb -h "$DBHOST" -P "$DBPORT" -u "$DBUSER" -p"$DBPASSWORD" -e "GRANT ALL PRIVILEGES ON $DBNAME.* TO '$DBUSER'@'%' IDENTIFIED BY '$DBPASSWORD' WITH GRANT OPTION; FLUSH PRIVILEGES;"
+
+    # Step 1: Create the database
+    mariadb -h "$DBHOST" -P "$DBPORT" -u root -p"$ROOTDBPASSWORD" -e "CREATE DATABASE IF NOT EXISTS $DBNAME;"
+
+    # Step 2: Create the user
+    mariadb -h "$DBHOST" -P "$DBPORT" -u root -p"$ROOTDBPASSWORD" -e "CREATE USER IF NOT EXISTS '$DBUSER'@'%' IDENTIFIED BY '$DBPASSWORD';"
+
+    # Step 3: Grant all privileges on the database to the user
+    mariadb -h "$DBHOST" -P "$DBPORT" -u root -p"$ROOTDBPASSWORD" -e "GRANT ALL PRIVILEGES ON $DBNAME.* TO '$DBUSER'@'%';"
+
+    # Step 4: Flush privileges to ensure all changes are applied immediately
+    mariadb -h "$DBHOST" -P "$DBPORT" -u root -p"$ROOTDBPASSWORD" -e "FLUSH PRIVILEGES;"
+
     php artisan p:environment:setup --author="$EMAIL" --url="$appurl" --timezone="CET" --telemetry=false --cache="redis" --session="redis" --queue="redis" --redis-host="localhost" --redis-pass="null" --redis-port="6379" --settings-ui=true
     php artisan p:environment:database --host="$DBHOST" --port="$DBPORT" --database="$DBNAME" --username="$DBUSER" --password="$DBPASSWORD"
+    
     php artisan migrate --seed --force
     php artisan p:user:make --email="$EMAIL" --username="$USERNAME" --name-first="$FIRSTNAME" --name-last="$LASTNAME" --password="$PASSWORD" --admin=1
     chown -R www-data:www-data /var/www/pterodactyl/*
